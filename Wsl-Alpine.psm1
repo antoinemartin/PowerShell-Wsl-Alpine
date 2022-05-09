@@ -60,6 +60,9 @@ function Install-WslAlpine {
         Base directory where to create the distribution directory. Equals to 
         $env:APPLOCALDATA (~\AppData\Local) by default.
 
+    .PARAMETER SkipConfigure
+        Skip Configuration.
+
     .INPUTS
         None.
 
@@ -70,7 +73,7 @@ function Install-WslAlpine {
         Install-WslAlpine toto
     
     .LINK
-        Unistall-WslAlpine
+        Uninstall-WslAlpine
         https://github.com/romkatv/powerlevel10k
         https://github.com/zsh-users/zsh-autosuggestions
         https://github.com/antoinemartin/wsl2-ssh-pageant-oh-my-zsh-plugin
@@ -85,7 +88,9 @@ function Install-WslAlpine {
         [Parameter(Position = 0)]
         [string]$DistributionName = "WslAlpine",
         [string]$RootFSURL = "https://dl-cdn.alpinelinux.org/alpine/v3.15/releases/x86_64/alpine-minirootfs-3.15.0-x86_64.tar.gz",
-        [string]$BaseDirectory = $env:LOCALAPPDATA
+        [string]$BaseDirectory = $env:LOCALAPPDATA,
+        [Parameter(Mandatory = $false)]
+        [switch]$SkipConfigure
     )
 
 
@@ -127,14 +132,17 @@ function Install-WslAlpine {
         Write-Host "####> Distribution [$DistributionName] already exists."
     }
 
-    Write-Host "####> Running initialization script on distribution [$DistributionName]..."
-    if ($PSCmdlet.ShouldProcess($DistributionName, 'Configure distribution')) {
-        Copy-Item -Path "$module_directory\.p10k.zsh" -Destination "\\wsl$\$DistributionName\tmp\.p10k.zsh"
-        Copy-Item -Path "$module_directory\configure.sh" -Destination "\\wsl$\$DistributionName\tmp\configure.sh"
-        &$wslPath -d $DistributionName -u root /bin/sh /tmp/configure.sh 2>&1 | Write-Verbose
-
-        Get-ChildItem HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Lxss |  Where-Object { $_.GetValue('DistributionName') -eq $DistributionName } | Set-ItemProperty -Name DefaultUid -Value 1000
+    if ($false -eq $SkipConfigure) {
+        Write-Host "####> Running initialization script on distribution [$DistributionName]..."
+        if ($PSCmdlet.ShouldProcess($DistributionName, 'Configure distribution')) {
+            Copy-Item -Path "$module_directory\.p10k.zsh" -Destination "\\wsl$\$DistributionName\tmp\.p10k.zsh"
+            Copy-Item -Path "$module_directory\configure.sh" -Destination "\\wsl$\$DistributionName\tmp\configure.sh"
+            &$wslPath -d $DistributionName -u root /bin/sh /tmp/configure.sh 2>&1 | Write-Verbose
+    
+            Get-ChildItem HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Lxss |  Where-Object { $_.GetValue('DistributionName') -eq $DistributionName } | Set-ItemProperty -Name DefaultUid -Value 1000
+        }    
     }
+
 
     Write-Host "####> Done. Command to enter distribution: wsl -d $DistributionName"
     ## More Stuff ?
@@ -143,11 +151,53 @@ function Install-WslAlpine {
 }
 
 function Uninstall-WslAlpine {
+    <#
+    .SYNOPSIS
+        Uninstalls Alpine based WSL distribution.
+
+    .DESCRIPTION
+        This command unregisters the specified distribution. It also deletes the
+        distribution base root filesystem and the directory of the distribution.
+
+    .PARAMETER DistributionName
+        The name of the distribution. If ommitted, will take WslAlpine by
+        default.
+
+    .PARAMETER BaseDirectory
+        Base directory where to create the distribution directory. Equals to 
+        $env:APPLOCALDATA (~\AppData\Local) by default.
+    
+    .PARAMETER KeepDirectory
+        If specified, keep the distribution directory. This allows recreating
+        the distribution from a saved root file system.
+
+    .INPUTS
+        None.
+
+    .OUTPUTS
+        None.
+
+    .EXAMPLE
+        Uninstall-WslAlpine toto
+    
+    .LINK
+        Install-WslAlpine
+        https://github.com/romkatv/powerlevel10k
+        https://github.com/zsh-users/zsh-autosuggestions
+        https://github.com/antoinemartin/wsl2-ssh-pageant-oh-my-zsh-plugin
+
+    .NOTES
+        The command tries to be indempotent. It means that it will try not to
+        do an operation that already has been done before.
+
+    #>    
     [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Position = 0)]
         [string]$DistributionName = "WslAlpine",
-        [string]$BaseDirectory = $env:LOCALAPPDATA
+        [string]$BaseDirectory = $env:LOCALAPPDATA,
+        [Parameter(Mandatory = $false)]
+        [switch]$KeepDirectory
     )
 
     # Retrieve the distribution if it already exists
@@ -164,10 +214,105 @@ function Uninstall-WslAlpine {
             Write-Verbose "Unregistering WSL distribution $DistributionName"
             &$wslPath --unregister $DistributionName 2>&1 | Write-Verbose 
         }
-        Remove-Item -Path $distribution_dir -Recurse
+        if ($false -eq $KeepDirectory) {
+            Remove-Item -Path $distribution_dir -Recurse
+        }
+    }
+
+}
+
+function Export-WslAlpine {
+    <#
+    .SYNOPSIS
+        Exports the file system of an Alpine WSL distrubtion.
+
+    .DESCRIPTION
+        This command exports the distribution and tries to compress it with 
+        the `gzip` command embedded in the distribution. If no destination file
+        is given, it replaces the root filesystem file in the distribution 
+        directory.
+
+    .PARAMETER DistributionName
+        The name of the distribution. If ommitted, will take WslAlpine by
+        default.
+
+    .PARAMETER BaseDirectory
+        Base directory where to create the distribution directory. Equals to 
+        $env:APPLOCALDATA (~\AppData\Local) by default.
+    
+    .PARAMETER OutputFile
+        The name of the output file. If it is not specified, it will overwrite
+        the root file system of the distribution.
+
+    .INPUTS
+        None.
+
+    .OUTPUTS
+        None.
+
+    .EXAMPLE
+        Install-WslAlpine toto
+        wsl -d toto -u root apk add openrc docker
+        Export-WslAlpine toto
+
+        Uninstall-WslAlpine toto -KeepDirectory
+        Install-WslAlpine toto -SkipConfigure
+    
+    .LINK
+        Install-WslAlpine
+        https://github.com/romkatv/powerlevel10k
+        https://github.com/zsh-users/zsh-autosuggestions
+        https://github.com/antoinemartin/wsl2-ssh-pageant-oh-my-zsh-plugin
+
+    .NOTES
+        The command tries to be indempotent. It means that it will try not to
+        do an operation that already has been done before.
+
+    #>    
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Position = 0)]
+        [string]$DistributionName = "WslAlpine",
+        [string]$BaseDirectory = $env:LOCALAPPDATA,
+        [Parameter(Mandatory = $false)]
+        [string]$OutputFile
+    )
+
+    # Retrieve the distribution if it already exists
+    $current_distribution = Get-ChildItem HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Lxss |  Where-Object { $_.GetValue('DistributionName') -eq $DistributionName }
+
+    # Where to install the distribution
+    $distribution_dir = "$BaseDirectory\$DistributionName"
+
+    if ($null -eq $current_distribution) {
+        Write-Error "Distribution $DistributionName doesn't exist !" -ErrorAction Stop
+    }
+    else {
+        if ($PSCmdlet.ShouldProcess($DistributionName, 'Export distribution')) {
+            if ("" -eq $OutputFile) {
+                $out_file = "$distribution_dir\rootfs.tar.gz"
+            }
+            else {
+                $out_file = "$OutputFile"
+            }
+            $export_file = "$distribution_dir\export.tar"
+
+            Write-Verbose "Exporting WSL distribution $DistributionName to $export_file"
+            &$wslPath --export $DistributionName "$export_file" | Write-Verbose 
+            $filepath = (Get-Item -Path "$export_file").Directory.FullName
+            Write-Verbose "Compressing export.tar in $filepath"
+            &$wslPath -d $DistributionName --cd "$filepath" gzip export.tar | Write-Verbose
+
+            If (test-path "$out_file") {
+                Remove-Item "$out_file"
+            }
+            Write-Verbose "Renaming $export_file.gz to $out_file"
+            Rename-Item -Path "$export_file.gz" "$out_file"
+        }
     }
 
 }
 
 Export-ModuleMember Install-WslAlpine
 Export-ModuleMember Uninstall-WslAlpine
+Export-ModuleMember Export-WslAlpine
