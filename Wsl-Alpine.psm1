@@ -301,13 +301,15 @@ function Export-WslAlpine {
             &$wslPath --export $DistributionName "$export_file" | Write-Verbose 
             $filepath = (Get-Item -Path "$export_file").Directory.FullName
             Write-Verbose "Compressing export.tar in $filepath"
+            Remove-Item "$export_file.gz" -Force -ErrorAction SilentlyContinue
             &$wslPath -d $DistributionName --cd "$filepath" gzip export.tar | Write-Verbose
 
             If (test-path "$out_file") {
                 Remove-Item "$out_file"
             }
             Write-Verbose "Renaming $export_file.gz to $out_file"
-            Rename-Item -Path "$export_file.gz" "$out_file"
+            Move-Item -Path "$export_file.gz" "$out_file"
+            Write-Host "Distribution $DistributionName saved to $out_file"
         }
     }
 
