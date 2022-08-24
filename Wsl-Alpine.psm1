@@ -87,7 +87,7 @@ function Install-WslAlpine {
     param(
         [Parameter(Position = 0)]
         [string]$DistributionName = "WslAlpine",
-        [string]$RootFSURL = "https://dl-cdn.alpinelinux.org/alpine/v3.15/releases/x86_64/alpine-minirootfs-3.15.0-x86_64.tar.gz",
+        [string]$RootFSURL = "https://dl-cdn.alpinelinux.org/alpine/v3.16/releases/x86_64/alpine-minirootfs-3.16.0-x86_64.tar.gz",
         [string]$BaseDirectory = $env:LOCALAPPDATA,
         [Parameter(Mandatory = $false)]
         [switch]$SkipConfigure
